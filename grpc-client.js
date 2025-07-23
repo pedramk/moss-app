@@ -85,6 +85,11 @@ function startEventStream() {
   });
   
   call.on("error", (err) => {
+    // Don't log errors if we're shutting down (cancelled on client)
+    if (err.code === 1 && err.details === 'Cancelled on client') {
+      // This is expected during shutdown, don't log as error
+      return;
+    }
     console.error("gRPC stream error:", err);
     if (isConnected) {
       isConnected = false;
@@ -120,6 +125,24 @@ emitter.stopCapture = () => {
       console.log("Agent capturing stopped:", response.message);
     }
   });
+};
+
+// Add close method for graceful shutdown
+emitter.close = () => {
+  try {
+    isConnected = false;
+    if (call) {
+      call.cancel();
+      call = null;
+    }
+    if (client) {
+      client.close();
+      client = null;
+    }
+    console.log("gRPC client closed gracefully");
+  } catch (error) {
+    console.error("Error closing gRPC client:", error);
+  }
 };
 
 module.exports = emitter;

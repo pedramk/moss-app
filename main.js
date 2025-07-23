@@ -137,9 +137,24 @@ app.whenReady().then(() => {
   });
 });
 
-app.on("before-quit", () => {
-  if (agentProcess) {
-    agentProcess.kill();
+app.on("before-quit", async () => {
+  try {
+    // Gracefully close gRPC connection
+    if (global.grpcClient && global.grpcClient.close) {
+      global.grpcClient.close();
+    }
+    
+    // Close database if open
+    if (db) {
+      await db.close();
+    }
+    
+    // Kill agent process
+    if (agentProcess) {
+      agentProcess.kill();
+    }
+  } catch (error) {
+    console.error("Error during app cleanup:", error);
   }
 });
 
