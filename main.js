@@ -28,6 +28,9 @@ function createWindow() {
 // Forward events from grpc-client.js to renderer
 function setupGrpcEvents() {
   const grpcClient = require("./grpc-client");
+  
+  // Store reference for later use
+  global.grpcClient = grpcClient;
   grpcClient.on("event", (event) => {
     const win = BrowserWindow.getAllWindows()[0];
     if (isCapturing) {
@@ -46,49 +49,65 @@ function setupGrpcEvents() {
 }
 
 ipcMain.on("start-capture", async () => {
-  isCapturing = true;
-  // Clear old db
-  if (db) {
-    await db.close();
+  try {
+    isCapturing = true;
+    // Clear old db
+    if (db) {
+      await db.close();
+    }
+    fs.rmSync(dbPath, { recursive: true, force: true });
+    db = new Level(dbPath);
+    BrowserWindow.getAllWindows().forEach((win) => {
+      win.webContents.send("clear-events");
+    });
+    
+    // Tell the agent to start capturing
+    if (global.grpcClient) {
+      global.grpcClient.startCapture();
+    }
+  } catch (error) {
+    console.error("Error in start-capture:", error);
   }
-  fs.rmSync(dbPath, { recursive: true, force: true });
-  db = new Level(dbPath);
-  BrowserWindow.getAllWindows().forEach((win) => {
-    win.webContents.send("clear-events");
-  });
 });
 
 ipcMain.on("stop-capture", async () => {
-  isCapturing = false;
-
-  const replaysDir = path.join(__dirname, "replays");
-  if (!fs.existsSync(replaysDir)) {
-    fs.mkdirSync(replaysDir);
-  }
-
-  const filePath = path.join(replaysDir, `capture-${Date.now()}.zip`);
-
   try {
-    const values = await db.values().all();
-    const events = values.map((v) => JSON.parse(v));
+    isCapturing = false;
+    
+    // Tell the agent to stop capturing
+    if (global.grpcClient) {
+      global.grpcClient.stopCapture();
+    }
 
-    await db.close();
+    const replaysDir = path.join(__dirname, "replays");
+    if (!fs.existsSync(replaysDir)) {
+      fs.mkdirSync(replaysDir);
+    }
 
-    const output = fs.createWriteStream(filePath);
-    const archive = archiver("zip");
+    const filePath = path.join(replaysDir, `capture-${Date.now()}.zip`);
 
-    output.on("close", () => {
-      console.log(archive.pointer() + " total bytes");
-      fs.rmSync(dbPath, { recursive: true, force: true });
-    });
+    if (db) {
+      const values = await db.values().all();
+      const events = values.map((v) => JSON.parse(v));
 
-    archive.on("error", (err) => {
-      console.error("Archive error:", err);
-    });
+      await db.close();
 
-    archive.pipe(output);
-    archive.append(JSON.stringify(events, null, 2), { name: "events.json" });
-    await archive.finalize();
+      const output = fs.createWriteStream(filePath);
+      const archive = archiver("zip");
+
+      output.on("close", () => {
+        console.log(archive.pointer() + " total bytes");
+        fs.rmSync(dbPath, { recursive: true, force: true });
+      });
+
+      archive.on("error", (err) => {
+        console.error("Archive error:", err);
+      });
+
+      archive.pipe(output);
+      archive.append(JSON.stringify(events, null, 2), { name: "events.json" });
+      await archive.finalize();
+    }
   } catch (err) {
     console.error("Failed during stop-capture process:", err);
   }
