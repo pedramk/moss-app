@@ -1,0 +1,20 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "description": "Hello World!",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "packageManager": "yarn@4.9.1",
+  "devDependencies": {
+    "electron": "^37.2.1"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.13.4",
+    "@grpc/proto-loader": "^0.7.15",
+    "archiver": "^5.3.1",
+    "level": "^8.0.0"
+  }
+}

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Captured Events Viewer</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background: #fafafc;
+        margin: 0;
+      }
+      h1 {
+        background: #1a202c;
+        color: #fff;
+        padding: 16px;
+        margin: 0;
+      }
+      #events {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      #events th,
+      #events td {
+        border: 1px solid #ddd;
+        padding: 8px;
+      }
+      #events th {
+        background: #f0f0f2;
+      }
+      #events tr:nth-child(even) {
+        background: #f8f8fa;
+      }
+      #events tr:hover {
+        background: #e0e7ff;
+      }
+      #container {
+        padding: 24px;
+      }
+      #event-count {
+        font-size: 0.95em;
+        color: #666;
+        margin-bottom: 12px;
+      }
+      .details {
+        font-family: monospace;
+        font-size: 0.9em;
+        color: #374151;
+      }
+      #controls {
+        margin-bottom: 16px;
+      }
+      #controls button {
+        padding: 8px 16px;
+        font-size: 1em;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #start-btn {
+        background: #4caf50;
+        color: white;
+      }
+      #stop-btn {
+        background: #f44336;
+        color: white;
+      }
+      #table-container {
+        max-height: 60vh; /* 60% of the viewport height */
+        overflow-y: auto;
+        border: 1px solid #ddd;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Captured Events Viewer</h1>
+    <div id="container">
+      <div id="controls">
+        <button id="start-btn">Start Capture</button>
+        <button id="stop-btn">Stop Capture</button>
+      </div>
+      <div id="event-count">Events: 0</div>
+      <div id="table-container">
+        <table id="events">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Timestamp</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="events-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <script>
+      let eventNumber = 1;
+      const tbody = document.getElementById("events-body");
+      const countDiv = document.getElementById("event-count");
+      let events = [];
+      let isCapturing = false;
+
+      document
+        .getElementById("start-btn")
+        .addEventListener("click", function () {
+          this.blur();
+          isCapturing = true;
+          eventNumber = 1;
+          events = [];
+          tbody.innerHTML = "";
+          countDiv.textContent = "Events: 0";
+          window.electronAPI.startCapture();
+        });
+
+      document.getElementById("stop-btn").addEventListener("click", () => {
+        isCapturing = false;
+        window.electronAPI.stopCapture();
+      });
+
+      window.electronAPI.onGrpcEvent((event) => {
+        if (isCapturing) {
+          events.push(event);
+
+          const tr = document.createElement("tr");
+          let detailsContent = event.details;
+
+          // Pretty-print JSON for SystemInfo
+          if (event.name === "SystemInfo") {
+            try {
+              const parsed = JSON.parse(event.details);
+              detailsContent = `<pre style="font-size: 0.92em; white-space: pre-wrap; max-width: 350px;">${JSON.stringify(
+                parsed,
+                null,
+                2
+              )}</pre>`;
+            } catch {
+              // Fallback to raw string
+              detailsContent = `<span class="details">${event.details}</span>`;
+            }
+          } else if (event.name === "SystemInfoChange") {
+            detailsContent = `<pre style="font-size: 0.92em; white-space: pre-wrap; max-width: 350px; color: #ef4444;">${event.details}</pre>`;
+          } else {
+            detailsContent = `<span class="details">${event.details}</span>`;
+          }
+
+          tr.innerHTML = `
+            <td>${eventNumber++}</td>
+            <td>${event.name}</td>
+            <td>${event.timestamp}</td>
+            <td>${detailsContent}</td>
+          `;
+          tbody.appendChild(tr);
+
+          countDiv.textContent = "Events: " + events.length;
+
+          // Optional: Scroll to newest
+          tr.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+      });
+
+      window.electronAPI.onClearEvents(() => {
+        tbody.innerHTML = "";
+        events = [];
+        eventNumber = 1;
+        countDiv.textContent = "Events: 0";
+      });
+    </script>
+  </body>
+</html>
